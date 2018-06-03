@@ -1,0 +1,436 @@
+<!doctype html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Draw some shit, bitches</title>
+    <style>
+html, body {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: sans-serif;
+  background-color: white;
+  display: grid;
+}
+
+
+/* Row-based display when client landscape, and column-based when portrait. */
+@media (max-aspect-ratio: 1/1) {
+  body {
+    grid-template-areas: "toolbox"
+                         "canvas"
+                         "chat";
+    grid-template-rows: 15% 55% 30%;
+  }
+  #maincanvas {
+    width: 100%;
+    height: auto;
+  }
+  #toolbox {
+    display:grid;
+    grid-auto-flow:column;
+    grid-template: repeat(3, 1fr) / repeat(9, 1fr);
+  }
+}
+
+@media (min-aspect-ratio: 1/1) and (max-aspect-ratio:5/3) {
+  body {
+    grid-template-areas: "toolbox chat"
+                         "canvas chat";
+    grid-template-columns: 70% 30%;
+    grid-template-rows: 15% 85%;
+  }
+  #maincanvas {
+    height: 100%;
+    width:auto;
+  }
+  #toolbox {
+    display:grid;
+    grid-auto-flow:column;
+    grid-template: repeat(3, 1fr) / repeat(9, 1fr);
+  }
+}
+
+@media (min-aspect-ratio:5/3) {
+  body {
+    grid-template-areas: "toolbox canvas chat";
+    grid-template-columns: 15% 55% 30%;
+  }
+  #maincanvas {
+    height: 100%;
+    width:auto;
+  }
+  #toolbox {
+    display:grid;
+    grid-auto-flow:row;
+    grid-template: repeat(9, 1fr) / repeat(3, 1fr);
+  }
+}
+
+
+#toolbox, #canvascontainer, #chatcontainer {
+  padding: 0.5rem;
+}
+#toolbox {
+  grid-area: toolbox;
+  padding-bottom: 0;
+}
+#toolbox * {
+  user-select: none;
+}
+
+#canvascontainer{
+  grid-area: canvas;
+}
+#maincanvas {
+  border: 2px solid grey;
+}
+
+#chatcontainer {
+  grid-area: chat;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 15rem;
+  border 2px solid grey;
+}
+
+#chatopt {
+  flex: 1;
+}
+
+#chatipt, #chatopt {
+  resize: none;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+
+/* Button-styled radio inputs */
+.toolbutton {
+    position:relative;
+}
+.toolbutton > div {
+  display: inline-block;
+  position:absolute;
+  top:0;
+  bottom:0;
+  left:0;
+  right:0;
+  width: 95%;
+  height: 95%;
+  border: 2px solid grey;
+  border-radius: 0.5rem;
+}
+.toolbutton > input {
+  display: none;
+}
+.toolbutton > input:not(:checked):not(:hover) + div,
+.toolbutton > div:not(:hover) {
+   background: linear-gradient(to top, #777 0%, #999 40%, #ddd 100%);
+   border-style: outset;
+}
+.toolbutton > input:not(:checked):hover + div,
+.toolbutton > div:hover {
+   background: linear-gradient(to top, #888 0%, #aaa 40%, #fff 100%);
+   border-style: outset;
+}
+.toolbutton > input:checked + div,
+.toolbutton > input:not(:checked) + div:active,
+.toolbutton > div:active {
+   background: linear-gradient(to bottom, #555 0%, #888 20%, #999 100%);
+   border-style: inset;
+   padding-bottom: 0;
+   padding-right: 0;
+   /*padding-top: 0.2rem;*/
+   /*padding-left: 0.2rem;*/
+}
+
+
+/* Changeable light/dark theme */
+.lighttheme {
+  background-color: white;
+  border-color: grey;
+  color: black;
+}
+.ddarktheme {
+  background-color: black;
+  border-color: white;
+  color: white;
+}
+
+
+/* Scale button icons to fit. */
+.toolbutton svg, .toolbutton img {
+  width: 100%;
+  height: 100%;
+}
+.toolbutton div.pad {
+  padding: 0.6rem;
+}
+
+
+/* Generate list of colours from the parent app's settings */
+{%- for colname, colval in colour_palette.items() %}
+#colourbutton{{ colname }} { background: {{colval}}; }
+{%- endfor %}
+    </style>
+    <script src="{{ url_for("static", filename="jquery.3.3.1.min.js") }}"></script>
+    <script src="{{ url_for("static", filename="socket.io-2.0.4.js") }}"></script>
+  </head>
+  <body class="darktheme">
+
+
+    <div id="toolbox">
+      <span class="toolbutton">
+        <div id="clearbutton">
+          <svg viewBox="0 0 100 100">
+            <path d="M82 30 L82 90 L18 90 L18 10 L62 10 L82 30 L62 30 L62 10" stroke="black" stroke-width="3" fill="white"/>
+          </svg>
+<!--
+          <svg viewBox="0 0 100 100">
+            <rect x="10" y="20" width="80" height="60" fill="white" stroke="black" stroke-width="6" />
+            <line x1="5" y1="10" x2="95" y2="90" stroke="red" stroke-width="5" />
+            <line x1="95" y1="10" x2="5" y2="90" stroke="red" stroke-width="5" />
+          </svg> 
+-->
+        </div>
+      </span>
+      <label for="rectangle" class="toolbutton">
+        <input type="radio" id="rectangle" name="brush" value="rectangle">
+        <div id="rectanglebutton">
+          <svg viewBox="0 0 100 100">
+            <rect x="10" y="10" width="60" height="60" fill="black" />
+            <line x1="70" y1="90" x2="90" y2="90" stroke="black" stroke-width="3" />
+            <line x1="90" y1="70" x2="90" y2="90" stroke="black" stroke-width="3" />
+            <line x1="70" y1="70" x2="90" y2="90" stroke="black" stroke-width="3" stroke-dasharray="5,5" />
+          </svg> 
+        </div>
+      </label>
+      <span class="toolbutton">
+        <div id="yourbuttonhere">
+        </div>
+      </span>
+      <label for="bigbrush" class="toolbutton">
+        <input type="radio" id="bigbrush" name="brush" value="big">
+        <div id="bigbrushbutton">
+          <svg viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="35" fill="black" />
+          </svg>
+        </div>
+      </label>
+      <label for="mediumbrush" class="toolbutton">
+        <input type="radio" id="mediumbrush" name="brush" value="medium" checked="checked">
+        <div id="mediumbrushbutton">
+          <svg viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="20" fill="black" />
+          </svg> 
+        </div>
+      </label>
+      <label for="smallbrush" class="toolbutton">
+        <input type="radio" id="smallbrush" name="brush" value="small">
+        <div id="smallbrushbutton">
+          <svg viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="10" fill="black" />
+          </svg> 
+        </div>
+      </label>
+{%- for colname, colval in colour_palette.items() %}
+      <label for="colour{{ colname }}" class="toolbutton">
+        <input type="radio" id="colour{{ colname }}" name="colour" value="{{ colname }}" {{ "checked=\"checked\""|safe if loop.index==1 }}>
+        <div id="colourbutton{{ colname }}">
+        </div>
+      </label>
+{%- endfor %}
+    </div>
+
+    <div id="canvascontainer">
+      <canvas id="maincanvas" class="darktheme"></canvas>
+    </div>
+    <div id="chatcontainer">
+      <div id="playerlistcontainer">
+        <ul id="playerlist">
+{%- for player in players %}
+          <li>{{ player }}</li>
+{%- endfor %}
+        </ul>
+      </div>
+      <textarea id="chatopt" cols="1" rows="10" class="darktheme"></textarea>
+      <textarea id="chatipt" cols="1" rows="2" class="darktheme"></textarea>
+    </div>
+    <script type="text/javascript">
+var colourPalette = {{ colour_palette|tojson }};
+
+var chatOpt = document.getElementById("chatopt");
+var chatIpt = document.getElementById("chatipt");
+
+var canvascontainer = document.getElementById("canvascontainer");
+var canvas  = document.getElementById("maincanvas");
+var context = canvas.getContext("2d");
+
+// Make sure canvas doesn't start at default size of
+// 300x150, and instead fills available area at an aspect ratio of 1x1.
+shortestEdge = Math.min(canvascontainer.offsetWidth, canvascontainer.offsetHeight)
+canvas.width = shortestEdge;
+canvas.height = shortestEdge;
+
+// Keep a record of canvas size to scale when resized.
+var canvasWidth = canvas.width;
+var canvasHeight = canvas.height;
+
+function fractionalLocationOfEvent(e) {
+}
+
+$(document).ready(function(){
+
+  socket = io.connect("/event");
+  socket.on("playerlist", function(msg){refreshPlayerList(msg);});
+  socket.on("chat", function(msg){$("#chatopt").append(msg+"\n");});
+
+function refreshPlayerList(playerNames) {
+  var listNode = document.getElementById("playerlist");
+  while (listNode.firstChild) {
+    listNode.removeChild(listNode.firstChild);
+  }
+  for(var i = 0; i < playerNames.length; i++) {
+    var item = document.createElement("li");
+    item.appendChild(document.createTextNode(playerNames[i]));
+    listNode.appendChild(item);
+  }
+}
+
+
+  // SocketIO drawing code. See README.md for licence details.
+
+  var mouse = {
+    click: false,
+    move: false,
+    pos: {x:0, y:0},
+    pos_prev: false
+  };
+
+  // register mouse event handlers
+  canvas.onmousedown = function(e){ mouse.click = true; };
+  canvas.onmouseup = function(e){ mouse.click = false; };
+  canvas.ontouchstart = function(e){ mouse.click = true; };
+  canvas.ontouchend = function(e){ mouse.click = false; mouse.pos_prev = false; };
+  canvas.ontouchcancel = function(e){ mouse.click = false; mouse.pos_prev = false; };
+  canvas.onmouseout = function(e){ mouse.click = false; };
+
+  // Normalize mouse position to range 0.0 - 1.0
+  // Touch events have a slightly different event structure to
+  // mouse events, so treat them separately.
+  canvas.onmousemove = function (e) {
+    mouse.pos.x = (e.pageX - canvas.offsetLeft) / canvas.offsetWidth;
+    mouse.pos.y = (e.pageY - canvas.offsetTop) / canvas.offsetHeight;
+    mouse.move = true;
+  };
+  canvas.ontouchmove = function (e) {
+    mouse.pos.x = (e.touches[0].pageX - canvas.offsetLeft) / canvas.offsetWidth;
+    mouse.pos.y = (e.touches[0].pageY - canvas.offsetTop) / canvas.offsetHeight;
+    mouse.move = true;
+  };
+
+  // draw line received from server
+  socket.on("paint", function (paintdata) {
+    if ("line" in paintdata) {
+      context.beginPath();
+      context.moveTo(paintdata["line"][0].x * canvas.width, paintdata["line"][0].y * canvas.height);
+      context.lineTo(paintdata["line"][1].x * canvas.width, paintdata["line"][1].y * canvas.height);
+      context.strokeStyle = colourPalette[paintdata["colour"]];
+      switch(paintdata["brush"]) {
+        case "small":
+          context.lineWidth = Math.ceil(canvas.width/100);
+          break;
+        case "medium":
+          context.lineWidth = Math.ceil(canvas.width/25);
+          break;
+        case "big":
+          context.lineWidth = Math.ceil(canvas.width/10);
+          break;
+      }
+      context.lineCap="round";
+      context.stroke();
+    } else if ("clear" in paintdata) {
+      context.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  });
+   
+  // main loop, running every 25ms
+  function mainLoop() {
+    // check if the user is drawing
+    if (mouse.click && mouse.move && mouse.pos_prev) {
+      // send line to to the server
+      brush = document.querySelector("input[name='brush']:checked").value;
+      colour = document.querySelector("input[name='colour']:checked").value;
+      socket.emit("paint", { line: [ mouse.pos, mouse.pos_prev ],
+                            brush: brush,
+                            colour: colour
+                            });
+      mouse.move = false;
+    }
+    mouse.pos_prev = {x: mouse.pos.x, y: mouse.pos.y};
+    setTimeout(mainLoop, 25);
+  }
+  mainLoop();
+
+});
+
+function chatiptkey(e) {
+  if(arguments.length==1 && e.keyCode==13) {
+    sendChat(chatIpt.value);
+    chatIpt.value = "";
+  }
+}
+
+function sendChat(txt) {
+  socket.emit("chat", {text: $("#chatipt").val().trim()});
+}
+
+function sendClear() {
+  socket.emit("paint", {clear: true});
+}
+
+
+function fitCanvas() {
+
+}
+
+function scaleMainCanvas() {
+  //canvasWidth = canvas.offsetWidth;
+  //canvasHeight = canvas.offsetHeight;
+  ////resizeCanvasAndContents(canvas, context, canvas.offsetWidth, canvas.offsetHeight);
+}
+
+function resizeCanvasAndContents(c, ctx, w, h) {
+
+  //var tempcanvas = document.createElement("canvas");
+  //var tempcontext = tempcanvas.getContext("2d");
+
+  //tempcanvas.width = w;
+  //tempcanvas.height = h;
+  //tempcontext.drawImage(canvas, 0, 0);
+
+  //c.width = w;
+  //c.height = h;
+  //ctx.drawImage(tempcanvas, 0, 0);
+
+  //widthScale = canvasWidth / canvas.width;
+  //heightScale = canvasHeight / canvas.height;
+
+  //canvas.width = canvas.offsetWidth;
+  //canvas.height = canvas.offsetHeight;
+
+
+
+  //context.scale(widthScale, heightScale);
+}
+
+document.getElementById("clearbutton").addEventListener("click", sendClear);
+chatIpt.addEventListener("keyup", chatiptkey);
+//window.addEventListener("resize", scaleMainCanvas);
+    </script>
+  </body>
+</html>
